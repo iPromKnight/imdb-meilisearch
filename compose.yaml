@@ -1,0 +1,20 @@
+name: poc-meilisearch-imdb-matching
+
+services:
+  imdb_matcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      LOG_DEBUG: "true"
+      MEILI_MASTER_KEY: "vnyU6SYFfqXQccdamSRZnpD-qeMxAtAOY6g6xBg6mCE"
+      SEED_ON_STARTUP: "true"
+      MEILI_DB_PATH: "/data"
+      MEILI_MAX_INDEXING_MEMORY: "2.0Gb"
+    restart: unless-stopped
+    tty: true
+    volumes:
+      - "./data:/data"
+    ports:
+      - "8080:8080"
+      - "7700:7700"
