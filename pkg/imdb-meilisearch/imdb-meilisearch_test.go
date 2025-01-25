@@ -42,11 +42,11 @@ func TestMain(m *testing.M) {
 		log.Fatalf("could not connect to meilisearch: %s", err)
 	}
 	res, err := client.AddDocuments([]map[string]interface{}{
-		{"id": 38650, "imdb_id": "tt0038650", "title": "It's a Wonderful Life", "year": 1946, "title_type": "movie"},
-		{"id": 63350, "imdb_id": "tt0063350", "title": "Night Of The Living Dead", "year": 1968, "title_type": "movie"},
-		{"id": 140738, "imdb_id": "tt0140738", "title": "Flash Gordon", "year": 1954, "title_type": "series"},
-		{"id": 123, "imdb_id": "tt0123", "title": "Flash Gordon", "year": 1953, "title_type": "series"},
-		{"id": 124, "imdb_id": "tt01234", "title": "Flash Gordon", "year": 1954, "title_type": "movie"},
+		{"id": 38650, "imdb_id": "tt0038650", "title": "It's a Wonderful Life", "year": 1946, "category": "movie"},
+		{"id": 63350, "imdb_id": "tt0063350", "title": "Night Of The Living Dead", "year": 1968, "category": "movie"},
+		{"id": 140738, "imdb_id": "tt0140738", "title": "Flash Gordon", "year": 1954, "category": "series"},
+		{"id": 123, "imdb_id": "tt0123", "title": "Flash Gordon", "year": 1953, "category": "series"},
+		{"id": 124, "imdb_id": "tt01234", "title": "Flash Gordon", "year": 1954, "category": "movie"},
 	}, "id")
 	if err != nil {
 		log.Fatalf("could not add documents: %s", err)
@@ -71,56 +71,56 @@ func TestMain(m *testing.M) {
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleMovieByFilename(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForFilename("Night Of The Living Dead (1968) [BluRay] [720p] [YTS.AM]/Night.Of.The.Living.Dead.1968.720p.BluRay.x264-[YTS.AM].mp4")
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForFilename("Night Of The Living Dead (1968) [BluRay] [720p] [YTS.AM]/Night.Of.The.Living.Dead.1968.720p.BluRay.x264-[YTS.AM].mp4")
 	if imdbTitle.Title != "Night Of The Living Dead" {
 		t.Errorf("expected title to be Night Of The Living Dead, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleEmptyStringByFilename(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForFilename("")
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForFilename("")
 	if imdbTitle.Title != "" {
 		t.Errorf("expected title to be empty, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleSeriesByFilename(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForFilename("FlashGordon.S01E01.ThePlanetOfDeath_512kb.mp4")
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForFilename("FlashGordon.S01E01.ThePlanetOfDeath_512kb.mp4")
 	if imdbTitle.Title != "Flash Gordon" {
 		t.Errorf("expected title to be Flash Gordon, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleSeriesWithYearByFilename(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForFilename("FlashGordon.S01E01.1954.ThePlanetOfDeath_512kb.mp4")
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForFilename("FlashGordon.S01E01.1954.ThePlanetOfDeath_512kb.mp4")
 	if imdbTitle.Title != "Flash Gordon" || imdbTitle.Id != "tt0140738" {
 		t.Errorf("expected title to be Flash Gordon, got %s ,Id:%s", imdbTitle.Title, imdbTitle.Id)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleMovie(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForTitleAndYear("Night Of The Living Dead", "movie", 1968)
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForTitleAndYear("Night Of The Living Dead", "movie", 1968)
 	if imdbTitle.Title != "Night Of The Living Dead" {
 		t.Errorf("expected title to be Night Of The Living Dead, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleEmptyString(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForTitleAndYear("", "", 0)
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForTitleAndYear("", "", 0)
 	if imdbTitle.Title != "" {
 		t.Errorf("expected title to be empty, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleSeries(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForTitleAndYear("FlashGordon", "series", 0)
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForTitleAndYear("FlashGordon", "series", 0)
 	if imdbTitle.Title != "Flash Gordon" {
 		t.Errorf("expected title to be Flash Gordon, got %s", imdbTitle.Title)
 	}
 }
 
 func TestImdbSearchClient_GetClosestImdbTitleSeriesWithYear(t *testing.T) {
-	imdbTitle := searchClient.GetClosestImdbTitleForTitleAndYear("FlashGordon", "series", 1954)
+	imdbTitle, _ := searchClient.GetClosestImdbTitleForTitleAndYear("FlashGordon", "series", 1954)
 	if imdbTitle.Title != "Flash Gordon" || imdbTitle.Id != "tt0140738" {
 		t.Errorf("expected title to be Flash Gordon, got %s ,Id:%s", imdbTitle.Title, imdbTitle.Id)
 	}

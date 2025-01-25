@@ -6,6 +6,7 @@ import (
 	meilisearchConfiguration "github.com/ipromknight/imdb-meilisearch/internal/meilisearch-configuration"
 	meilisearchclient "github.com/ipromknight/imdb-meilisearch/internal/pkg/search/meilisearch"
 	"github.com/ipromknight/imdb-meilisearch/internal/pkg/tsv_reader"
+	"github.com/meilisearch/meilisearch-go"
 	"github.com/rs/zerolog"
 	"html"
 	"io"
@@ -31,10 +32,12 @@ func Seed(meilisearchConfig meilisearchConfiguration.ClientOptions, logger zerol
 	var taskIds []int64
 
 	titlemap := map[string]string{
-		"movie":    "movie",
-		"tvMovie":  "movie",
-		"tvSeries": "series",
-		"tvShort":  "series",
+		"movie":        "movie",
+		"tvMovie":      "movie",
+		"tvSeries":     "series",
+		"tvShort":      "series",
+		"tvMiniSeries": "series",
+		"tvSpecial":    "series",
 	}
 
 	logger.Info().Msg("Writing titles to meilisearch...")
@@ -88,11 +91,11 @@ func Seed(meilisearchConfig meilisearchConfiguration.ClientOptions, logger zerol
 			title := html.UnescapeString(record[2])
 			year := csvgetint(record[5])
 			imdbRecord := map[string]interface{}{
-				"id":         idWithoutPrefix,
-				"imdb_id":    id,
-				"title":      title,
-				"year":       year,
-				"title_type": titlemap[typeOfMedia],
+				"id":       idWithoutPrefix,
+				"imdb_id":  id,
+				"title":    title,
+				"year":     year,
+				"category": titlemap[typeOfMedia],
 			}
 			insertCount++
 			valueArgs = append(valueArgs, imdbRecord)
@@ -115,16 +118,16 @@ func Seed(meilisearchConfig meilisearchConfiguration.ClientOptions, logger zerol
 		taskIds = append(taskIds, taskInfo.TaskUID)
 	}
 	for _, id := range taskIds {
-		task, _ := index.WaitForTask(id, 20)
+		task, _ := index.WaitForTask(id, 30)
 		if task.Status != "succeeded" {
 			logger.Error().Str("status", string(task.Status)).Msg("task failed")
 		}
 	}
 	logger.Info().Int("rows", rowCount).Int("inserted", insertCount).Msg("Finished writing titles to meilisearch")
 
-	logger.Info().Msg("Adding filtering index")
+	logger.Info().Msg("Creating index settings...")
 
-	_, err = index.UpdateFilterableAttributes(&[]string{"title_type", "year"})
+	err = setIndexSettings(index, logger)
 	if err != nil {
 		logger.Error().AnErr("error", err).Msg("Failed to update index")
 		return err
@@ -138,4 +141,64 @@ func csvgetint(instr string) int {
 		return 0
 	}
 	return getint
+}
+
+func setIndexSettings(index meilisearch.IndexManager, logger zerolog.Logger) error {
+	distinctAttribute := "imdb_id"
+	settings := meilisearch.Settings{
+		RankingRules: []string{
+			"words",
+			"typo",
+			"proximity",
+			"attribute",
+			"sort",
+			"exactness",
+		},
+		DistinctAttribute: &distinctAttribute,
+		SearchableAttributes: []string{
+			"title",
+			"year",
+		},
+		DisplayedAttributes: []string{
+			"title",
+			"category",
+			"year",
+			"imdb_id",
+		},
+		//StopWords: search.GetStopWords(),
+		StopWords: make([]string, 0),
+		SortableAttributes: []string{
+			"title",
+		},
+		FilterableAttributes: []string{
+			"category",
+			"year",
+		},
+		Synonyms: map[string][]string{},
+		TypoTolerance: &meilisearch.TypoTolerance{
+			Enabled: true,
+		},
+		Pagination: &meilisearch.Pagination{
+			MaxTotalHits: 1000,
+		},
+		Faceting: &meilisearch.Faceting{
+			MaxValuesPerFacet: 200,
+		},
+		SearchCutoffMs:  200,
+		SeparatorTokens: []string{".", "-", "_"},
+	}
+
+	taskInfo, err := index.UpdateSettings(&settings)
+	if err != nil {
+		return err
+	}
+
+	task, taskWaitError := index.WaitForTask(taskInfo.TaskUID, 30)
+	if taskWaitError != nil {
+		return taskWaitError
+	}
+	if task.Status != "succeeded" {
+		logger.Error().Str("status", string(task.Status)).Msg("task failed")
+	}
+	return nil
 }

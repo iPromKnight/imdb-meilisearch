@@ -24,10 +24,10 @@ func RegisterDaemonCommand(rootCmd *cobra.Command) {
 			daemonOptions.ClientOptions = daemonOptions.ClientOptions.PopulateFromEnv()
 
 			if daemonOptions.Host == "" {
-				return fmt.Errorf("required flag 'meili-host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
+				return fmt.Errorf("required flag 'host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
 			}
 			if daemonOptions.ApiKey == "" {
-				return fmt.Errorf("required flag 'meili-api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
+				return fmt.Errorf("required flag 'api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
 			}
 			return nil
 		},
@@ -38,19 +38,14 @@ func RegisterDaemonCommand(rootCmd *cobra.Command) {
 				logger = zerolog.New(os.Stdout).Level(zerolog.DebugLevel).With().Timestamp().Logger()
 			}
 
-			api, createError := daemonApi.NewApi(daemonOptions.ClientOptions, logger)
-			if createError != nil {
-				logger.Fatal().Err(createError).AnErr("error", createError).Msg("Failed to create api instance")
-				return
-			}
-			err := daemonApi.Serve(api, logger)
+			err := daemonApi.ServeApi(daemonOptions.ClientOptions, logger)
 			if err != nil {
 				logger.Fatal().AnErr("error", err).Msg("Failed to start api")
 			}
 		},
 	}
 
-	daemonCmd.PersistentFlags().StringVar(&daemonOptions.Host, "meili-host", "", "Host of your Meilisearch database")
-	daemonCmd.PersistentFlags().StringVar(&daemonOptions.ApiKey, "meili-api-key", "", "API Key for accessing Meilisearch")
+	daemonCmd.PersistentFlags().StringVar(&daemonOptions.Host, "host", "", "Host of your Meilisearch database")
+	daemonCmd.PersistentFlags().StringVar(&daemonOptions.ApiKey, "api-key", "", "API Key for accessing Meilisearch")
 	rootCmd.AddCommand(daemonCmd)
 }

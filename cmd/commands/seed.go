@@ -24,10 +24,10 @@ func RegisterSeedCommand(rootCmd *cobra.Command) {
 			seedOptions.ClientOptions = seedOptions.ClientOptions.PopulateFromEnv()
 
 			if seedOptions.Host == "" {
-				return fmt.Errorf("required flag 'meili-host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
+				return fmt.Errorf("required flag 'host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
 			}
 			if seedOptions.ApiKey == "" {
-				return fmt.Errorf("required flag 'meili-api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
+				return fmt.Errorf("required flag 'api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
 			}
 			return nil
 		},
@@ -41,11 +41,16 @@ func RegisterSeedCommand(rootCmd *cobra.Command) {
 			logger.Debug().Str("Host", seedOptions.Host).Msg("Using Meilisearch Host")
 			logger.Debug().Str("ApiKey", seedOptions.ApiKey).Msg("Using Meilisearch Api Key")
 
-			seeder.Seed(seedOptions.ClientOptions, logger)
+			err := seeder.Seed(seedOptions.ClientOptions, logger)
+			if err != nil {
+				logger.Error().Err(err).Msg("Failed to seed MeiliSearch")
+			} else {
+				logger.Info().Msg("Successfully seeded MeiliSearch")
+			}
 		},
 	}
 
-	seedCmd.PersistentFlags().StringVar(&seedOptions.Host, "meili-host", "", "Host of your Meilisearch database")
-	seedCmd.PersistentFlags().StringVar(&seedOptions.ApiKey, "meili-api-key", "", "API Key for accessing Meilisearch")
+	seedCmd.PersistentFlags().StringVar(&seedOptions.Host, "host", "", "Host of your Meilisearch database")
+	seedCmd.PersistentFlags().StringVar(&seedOptions.ApiKey, "api-key", "", "API Key for accessing Meilisearch")
 	rootCmd.AddCommand(seedCmd)
 }

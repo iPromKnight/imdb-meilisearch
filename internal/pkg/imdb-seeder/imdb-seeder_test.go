@@ -65,14 +65,17 @@ func TestMain(m *testing.M) {
 
 func TestSeed(t *testing.T) {
 	logger := zerolog.New(os.Stdout).Level(zerolog.DebugLevel).With().Timestamp().Logger()
-	Seed(clientConfig, logger)
+	err := Seed(clientConfig, logger)
+	if err != nil {
+		return
+	}
 
 	searchClient, _ := meilisearchClient.InitMeiliSearchClient(clientConfig)
 	var result meilisearch.DocumentsResult
-	err := searchClient.GetDocuments(&meilisearch.DocumentsQuery{
-		Fields: []string{"imdb_id", "title", "year", "title_type"},
+	searchErr := searchClient.GetDocuments(&meilisearch.DocumentsQuery{
+		Fields: []string{"imdb_id", "title", "year", "category"},
 	}, &result)
-	if err != nil {
+	if searchErr != nil {
 		t.Errorf("Could not get documents: %s", err)
 	}
 
@@ -89,8 +92,8 @@ func TestSeed(t *testing.T) {
 			if doc["year"] != float64(1954) {
 				t.Errorf("Expected year to be '1954', got %s", doc["year"])
 			}
-			if doc["title_type"] != "series" {
-				t.Errorf("Expected title_type to be 'series', got %s", doc["title_type"])
+			if doc["category"] != "series" {
+				t.Errorf("Expected category to be 'series', got %s", doc["category"])
 			}
 		case "tt0063350":
 			if doc["title"] != "Night of the Living Dead" {
@@ -99,8 +102,8 @@ func TestSeed(t *testing.T) {
 			if doc["year"] != float64(1968) {
 				t.Errorf("Expected year to be '1968', got %s", doc["year"])
 			}
-			if doc["title_type"] != "movie" {
-				t.Errorf("Expected title_type to be 'movie', got %s", doc["title_type"])
+			if doc["category"] != "movie" {
+				t.Errorf("Expected category to be 'movie', got %s", doc["category"])
 			}
 		case "tt0038650":
 			if doc["title"] != "It's a Wonderful Life" {
@@ -109,8 +112,8 @@ func TestSeed(t *testing.T) {
 			if doc["year"] != float64(1946) {
 				t.Errorf("Expected year to be '1946', got %s", doc["year"])
 			}
-			if doc["title_type"] != "movie" {
-				t.Errorf("Expected title_type to be 'movie', got %s", doc["title_type"])
+			if doc["category"] != "movie" {
+				t.Errorf("Expected category to be 'movie', got %s", doc["category"])
 			}
 		default:
 			t.Errorf("Unexpected imdb_id: %s", doc["imdb_id"])

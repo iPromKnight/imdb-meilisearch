@@ -1,6 +1,7 @@
 package imdb_meilisearch
 
 import (
+	"fmt"
 	meilisearchConfiguration "github.com/ipromknight/imdb-meilisearch/internal/meilisearch-configuration"
 	"github.com/ipromknight/imdb-meilisearch/internal/pkg/search"
 	meilisearchClient "github.com/ipromknight/imdb-meilisearch/internal/pkg/search/meilisearch"
@@ -8,7 +9,6 @@ import (
 	"github.com/razsteinmetz/go-ptn"
 	"github.com/rs/zerolog"
 	"os"
-	"strconv"
 )
 
 type ImdbSearchClient struct {
@@ -16,23 +16,28 @@ type ImdbSearchClient struct {
 	logger zerolog.Logger
 }
 type ImdbMinimalTitle struct {
-	Id    string
-	Type  string
-	Title string
-	Score float64
+	Id       string  `json:"imdb_id"`
+	Title    string  `json:"title"`
+	Year     float64 `json:"year"`
+	Category string  `json:"category"`
+	Score    float64 `json:"score"`
 }
 
 type SearchClientConfig struct {
-	MeiliSearchConfig meilisearchConfiguration.ClientOptions
-	Logger            zerolog.Logger
+	MeiliSearchConfig     meilisearchConfiguration.ClientOptions
+	RankingScoreThreshold float64
+	Logger                zerolog.Logger
 }
 
 type SearchQuery struct {
-	Title     string
-	TitleType string
-	Year      int
-	Filename  string
+	Title                 string
+	TitleType             string
+	Year                  int
+	Filename              string
+	RankingScoreThreshold float64
 }
+
+var clientOptions SearchClientConfig
 
 func NewSearchClient(searchClientConfig SearchClientConfig) (*ImdbSearchClient, error) {
 	if searchClientConfig.Logger.GetLevel() == zerolog.NoLevel {
@@ -44,13 +49,14 @@ func NewSearchClient(searchClientConfig SearchClientConfig) (*ImdbSearchClient, 
 		return nil, err
 	}
 	searchClient := &ImdbSearchClient{index: index, logger: searchClientConfig.Logger}
+	clientOptions = searchClientConfig
 	return searchClient, nil
 }
 
-func (searchClient *ImdbSearchClient) GetClosestImdbTitleForFilename(filename string) ImdbMinimalTitle {
+func (searchClient *ImdbSearchClient) GetClosestImdbTitleForFilename(filename string) (*ImdbMinimalTitle, error) {
 	info, err := ptn.Parse(filename)
 	if err != nil {
-		return ImdbMinimalTitle{}
+		return &ImdbMinimalTitle{}, err
 	}
 	titleType := "series"
 	if info.IsMovie {
@@ -59,50 +65,65 @@ func (searchClient *ImdbSearchClient) GetClosestImdbTitleForFilename(filename st
 	return searchClient.GetClosestImdbTitleForTitleAndYear(info.Title, titleType, info.Year)
 }
 
-func (searchClient *ImdbSearchClient) GetClosestImdbTitleForTitleAndYear(title string, titleType string, year int) ImdbMinimalTitle {
+func (searchClient *ImdbSearchClient) GetClosestImdbTitleForTitleAndYear(title string, titleType string, year int) (*ImdbMinimalTitle, error) {
 	if len(title) < 2 {
-		return ImdbMinimalTitle{}
+		return &ImdbMinimalTitle{}, fmt.Errorf("title must be at least 2 characters long")
 	}
 	var imdbMinimal ImdbMinimalTitle
 	if title == "" {
-		return ImdbMinimalTitle{}
-	}
-	var filters interface{}
-	if year != 0 {
-		filters = "year < " + strconv.Itoa(year+1) + " AND year > " + strconv.Itoa(year-1)
-	} else {
-		filters = nil
-	}
-	if titleType == "series" {
-		if filters == nil {
-			filters = "title_type = series"
-		} else {
-			filters = filters.(string) + " AND title_type = series"
-		}
-
+		return &ImdbMinimalTitle{}, fmt.Errorf("title must be provided")
 	}
 
-	searchRes, err := searchClient.index.Search(search.NormalizeString(title),
-		&meilisearch.SearchRequest{
-			Limit:                1,
-			AttributesToSearchOn: []string{"title"},
-			Filter:               filters,
-			ShowRankingScore:     true,
-		})
+	var filters []string
+	handleYear(year, &filters)
+	handleSeriesType(titleType, &filters)
+	handleMovieType(titleType, &filters)
+
+	searchRequest := &meilisearch.SearchRequest{
+		Limit:                 1,
+		AttributesToSearchOn:  []string{"title", "year"},
+		AttributesToHighlight: []string{"title", "year"},
+		Filter:                filters,
+		ShowRankingScore:      true,
+	}
+
+	if clientOptions.RankingScoreThreshold > 0 {
+		searchRequest.RankingScoreThreshold = clientOptions.RankingScoreThreshold
+	}
+
+	searchRes, err := searchClient.index.Search(search.NormalizeString(title), searchRequest)
 	if err != nil {
 		searchClient.logger.Error().AnErr("error", err).Msg("could not search meilisearch")
-		return ImdbMinimalTitle{}
+		return &ImdbMinimalTitle{}, err
 	}
 	var hit map[string]interface{}
 	for _, result := range searchRes.Hits {
 		hit = result.(map[string]interface{})
 		imdbMinimal.Id = hit["imdb_id"].(string)
-		imdbMinimal.Type = hit["title_type"].(string)
 		imdbMinimal.Title = hit["title"].(string)
+		imdbMinimal.Year = hit["year"].(float64)
+		imdbMinimal.Category = hit["category"].(string)
 		imdbMinimal.Score = hit["_rankingScore"].(float64)
 		break
 	}
 
-	return imdbMinimal
+	return &imdbMinimal, nil
+}
 
+func handleSeriesType(titleType string, filters *[]string) {
+	if titleType == "series" {
+		*filters = append(*filters, `category = "series"`)
+	}
+}
+
+func handleMovieType(titleType string, filters *[]string) {
+	if titleType == "movie" {
+		*filters = append(*filters, `category = "movie"`)
+	}
+}
+
+func handleYear(year int, filters *[]string) {
+	if year != 0 {
+		*filters = append(*filters, fmt.Sprintf("year < %d AND year > %d", year+1, year-1))
+	}
 }

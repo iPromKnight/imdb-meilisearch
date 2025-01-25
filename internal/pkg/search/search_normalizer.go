@@ -11,8 +11,16 @@ func NormalizeString(instr string) string {
 	instr = norm.NFC.String(instr)                  // Unicode normalization
 	instr = substituteRuneF(strings.ToLower(instr)) // Substitute runes
 	instr = strings.TrimSpace(instr)                // Trim spaces
-	instr = removeStopWords(instr)                  // Remove stop words
+	//instr = removeStopWords(instr)                  // Remove stop words
 	return instr
+}
+
+func GetStopWords() []string {
+	stopWordsList := make([]string, 0, len(stopWords))
+	for word := range stopWords {
+		stopWordsList = append(stopWordsList, word)
+	}
+	return stopWordsList
 }
 
 var stopWords = map[string]bool{
@@ -45,6 +53,7 @@ var stopWords = map[string]bool{
 	"no": true, "nor": true, "not": true, "only": true, "own": true, "same": true,
 	"so": true, "than": true, "too": true, "very": true, "s": true, "t": true,
 	"can": true, "will": true, "just": true, "don": true, "should": true, "now": true,
+	"torrenting": true, "xxx": true,
 }
 
 func removeStopWords(instr string) string {

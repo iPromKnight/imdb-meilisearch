@@ -25,27 +25,35 @@ func RegisterSearchCommand(rootCmd *cobra.Command) {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			searchOptions.ClientOptions = searchOptions.ClientOptions.PopulateFromEnv()
 
+			if searchOptions.RankingScoreThreshold < 0 {
+				return fmt.Errorf("ranking-threshold must be a positive float")
+			}
+
+			if searchOptions.RankingScoreThreshold == 0 {
+				searchOptions.RankingScoreThreshold = 0.85
+			}
+
 			if searchOptions.Title == "" && searchOptions.Filename == "" {
-				return fmt.Errorf("required flag 'search-title' or 'search-filename' is not set")
+				return fmt.Errorf("required flag 'title' or 'filename' is not set")
 			}
 
 			if searchOptions.Title != "" && searchOptions.Filename != "" {
-				return fmt.Errorf("only one of 'search-title' or 'search-filename' can be set")
+				return fmt.Errorf("only one of 'title' or 'filename' can be set")
 			}
 
 			if searchOptions.Title != "" && searchOptions.TitleType != "movie" && searchOptions.TitleType != "series" {
-				return fmt.Errorf("search-type must be either 'movie' or 'series' if title is set")
+				return fmt.Errorf("type must be either 'movie' or 'series' if title is set")
 			}
 
 			if searchOptions.Year < 0 {
-				return fmt.Errorf("search-year must be a positive integer")
+				return fmt.Errorf("year must be a positive integer")
 			}
 
 			if searchOptions.Host == "" {
-				return fmt.Errorf("required flag 'meili-host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
+				return fmt.Errorf("required flag 'host' is not set and the fallback environment variable 'MEILISEARCH_HOST' is not set")
 			}
 			if searchOptions.ApiKey == "" {
-				return fmt.Errorf("required flag 'meili-api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
+				return fmt.Errorf("required flag 'api-key' is not set and the fallback environment variable 'MEILI_MASTER_KEY' is not set")
 			}
 			return nil
 		},
@@ -63,19 +71,22 @@ func RegisterSearchCommand(rootCmd *cobra.Command) {
 		},
 	}
 
-	searchCmd.PersistentFlags().StringVar(&searchOptions.Title, "search-title", "", "Search Title")
-	searchCmd.PersistentFlags().StringVar(&searchOptions.TitleType, "search-type", "", "Search Category type - can be movie or series.")
-	searchCmd.PersistentFlags().IntVar(&searchOptions.Year, "search-year", 0, "Search Year")
-	searchCmd.PersistentFlags().StringVar(&searchOptions.Filename, "search-filename", "", "Search Filename")
+	searchCmd.PersistentFlags().StringVar(&searchOptions.Title, "title", "", "Search Title")
+	searchCmd.PersistentFlags().StringVar(&searchOptions.TitleType, "category", "", "Search Category type - can be movie or series.")
+	searchCmd.PersistentFlags().IntVar(&searchOptions.Year, "year", 0, "Search Year")
+	searchCmd.PersistentFlags().Float64Var(&searchOptions.RankingScoreThreshold, "ranking-threshold", 0, "Ranking Threshold")
+	searchCmd.PersistentFlags().StringVar(&searchOptions.Filename, "filename", "", "Search Filename")
 
 	rootCmd.AddCommand(searchCmd)
 }
 
 func performSearch(options searchCommandConfig, logger zerolog.Logger) {
-	imdbClient, err := imdbMeilisearch.NewSearchClient(imdbMeilisearch.SearchClientConfig{
-		MeiliSearchConfig: options.ClientOptions,
-		Logger:            logger,
-	})
+	clientOptions := imdbMeilisearch.SearchClientConfig{
+		MeiliSearchConfig:     options.ClientOptions,
+		Logger:                logger,
+		RankingScoreThreshold: options.RankingScoreThreshold,
+	}
+	imdbClient, err := imdbMeilisearch.NewSearchClient(clientOptions)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create IMDB Search Client")
 		return
@@ -83,11 +94,19 @@ func performSearch(options searchCommandConfig, logger zerolog.Logger) {
 
 	start := time.Now()
 
-	var imdbMinimal imdbMeilisearch.ImdbMinimalTitle
+	var imdbMinimal *imdbMeilisearch.ImdbMinimalTitle
 	if options.Filename != "" {
-		imdbMinimal = imdbClient.GetClosestImdbTitleForFilename(options.Filename)
+		imdbMinimal, err = imdbClient.GetClosestImdbTitleForFilename(options.Filename)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to get title from filename")
+			return
+		}
 	} else {
-		imdbMinimal = imdbClient.GetClosestImdbTitleForTitleAndYear(options.Title, options.TitleType, options.Year)
+		imdbMinimal, err = imdbClient.GetClosestImdbTitleForTitleAndYear(options.Title, options.TitleType, options.Year)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to get title from title and year")
+			return
+		}
 	}
 
 	if imdbMinimal.Title == "" {
@@ -95,7 +114,7 @@ func performSearch(options searchCommandConfig, logger zerolog.Logger) {
 		return
 	}
 
-	logger.Info().Str("Title", imdbMinimal.Title).Str("Type", imdbMinimal.Type).Str("Imdb Id", imdbMinimal.Id).Float64("score", imdbMinimal.Score).Msg("Best Match")
+	logger.Info().Str("Title", imdbMinimal.Title).Str("Type", imdbMinimal.Category).Str("Imdb Id", imdbMinimal.Id).Float64("score", imdbMinimal.Score).Msg("Best Match")
 
 	elapsed := time.Since(start)
 
